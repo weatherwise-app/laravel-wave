@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Qruto\Wave\Events;
 
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -11,8 +13,6 @@ class SseConnectionClosedEvent
 
     /**
      * Create a new event instance.
-     *
-     * @return void
      */
     public function __construct(public ?Authenticatable $user, public string $connectionId) {}
 }

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Redis;
 use Qruto\Wave\Storage\BroadcastEventHistory;
 use Qruto\Wave\Storage\BroadcastingEvent;
 
@@ -14,7 +15,7 @@ it('successfully pushes event to Redis history', function () {
     $this->freezeTime(function (Carbon $time) use ($event) {
         expect($this->history->pushEvent($event))
             ->toBe($time->getPreciseTimestamp(3).'-0')
-            ->and(\Illuminate\Support\Facades\Redis::xRange('broadcasted_events', '0', '+'))
+            ->and(Redis::xRange('broadcasted_events', '0', '+'))
             ->toEqual([
                 $time->getPreciseTimestamp(3).'-0' => [
                     'id' => '',
@@ -42,7 +43,7 @@ it('removes outdated events from Redis history', function () {
     $this->history->pushEvent($event2);
     $this->history->pushEvent($event3);
 
-    expect(\Illuminate\Support\Facades\Redis::xRange('broadcasted_events', '0', '+'))->toEqual([
+    expect(Redis::xRange('broadcasted_events', '0', '+'))->toEqual([
         $event2->id => [
             'id' => '',
             'name' => $event2->name,

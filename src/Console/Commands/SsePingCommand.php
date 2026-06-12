@@ -3,6 +3,7 @@
 namespace Qruto\Wave\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
 use Qruto\Wave\Events\SsePingEvent;
 
 class SsePingCommand extends Command
@@ -31,7 +32,7 @@ class SsePingCommand extends Command
 
                 $this->components->twoColumnDetail('<fg=gray>'.now().'</> SSE Wave Connections', '<fg=green;options=bold>PINGED</>');
 
-                sleep($interval);
+                Sleep::sleep($interval);
             }
         } else {
             $this->components->twoColumnDetail('<fg=gray>'.now().'</> SSE Wave Connections', '<fg=green;options=bold>PINGED</>');

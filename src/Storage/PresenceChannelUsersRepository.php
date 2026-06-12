@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Qruto\Wave\Storage;
 
 use Illuminate\Contracts\Auth\Authenticatable;

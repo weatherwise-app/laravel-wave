@@ -115,6 +115,6 @@ class PresenceChannelUsersRedisRepository implements PresenceChannelUsersReposit
                 }
 
                 return null;
-            })->filter()->values()->toArray();
+            })->filter()->values()->all();
     }
 }

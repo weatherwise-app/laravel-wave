@@ -2,6 +2,7 @@
 
 namespace Qruto\Wave\Listeners;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Str;
 use Qruto\Wave\Events\PresenceChannelLeaveEvent;
 use Qruto\Wave\Events\SseConnectionClosedEvent;
@@ -13,7 +14,7 @@ class RemoveStoredConnectionListener
 
     public function handle(SseConnectionClosedEvent $event)
     {
-        if (! $event->user instanceof \Illuminate\Contracts\Auth\Authenticatable) {
+        if (! $event->user instanceof Authenticatable) {
             return;
         }
 

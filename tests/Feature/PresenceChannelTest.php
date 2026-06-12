@@ -42,7 +42,7 @@ test('join request respond with actual count of channel users', function () {
     $connection = waveConnection();
     joinRequest('presence-channel', $this->user, $connection->id());
 
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $rick = User::factory()->create(['name' => 'Rick']);
     $connectionRick = waveConnection($rick);
     $response = joinRequest('presence-channel', $rick, $connectionRick->id());
@@ -60,7 +60,7 @@ test('leave request respond with actual count of channel users', function () {
     $connection = waveConnection();
     joinRequest('presence-channel', $this->user, $connection->id());
 
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $rick = User::factory()->create(['name' => 'Rick']);
     $connectionRick = waveConnection($rick);
     $response = leaveRequest('presence-channel', $rick, $connectionRick->id());
@@ -71,10 +71,10 @@ test('leave request respond with actual count of channel users', function () {
 });
 
 it('receives join channel event', closure: function () {
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $rick = User::factory()->create(['name' => 'Rick']);
 
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $morty = User::factory()->create(['name' => 'Morty']);
 
     $connectionRick = waveConnection($rick);
@@ -87,10 +87,10 @@ it('receives join channel event', closure: function () {
 });
 
 test('leave channel event received', function () {
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $rick = User::factory()->create(['name' => 'Rick']);
 
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $morty = User::factory()->create(['name' => 'Morty']);
 
     $connectionRick = waveConnection($rick);
@@ -112,10 +112,10 @@ it('doesn\'t receive events without access', function () {
 });
 
 test('user leave all channels on connection close', function () {
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $rick = User::factory()->create(['name' => 'Rick']);
 
-    /** @var \Illuminate\Contracts\Auth\Authenticatable */
+    /** @var Authenticatable */
     $morty = User::factory()->create(['name' => 'Morty']);
 
     Broadcast::channel('presence-channel-2', fn () => ['id' => request()->user()->id, 'name' => request()->user()->name]);

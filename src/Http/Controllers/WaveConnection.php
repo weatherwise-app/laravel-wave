@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Qruto\Wave\Http\Controllers;
 
 use Illuminate\Http\Request;

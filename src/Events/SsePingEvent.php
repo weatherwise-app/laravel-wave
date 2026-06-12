@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Qruto\Wave\Events;
 
 use Illuminate\Broadcasting\Channel;
@@ -17,7 +19,7 @@ class SsePingEvent implements ShouldBroadcast
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return \Illuminate\Broadcasting\Channel|array
+     * @return Channel|array
      */
     public function broadcastOn()
     {

@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Qruto\Wave\Events;
 
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -16,8 +19,6 @@ class PresenceChannelJoinEvent implements ShouldBroadcast
 
     /**
      * Create a new event instance.
-     *
-     * @return void
      */
     public function __construct(
         public $userKey,
@@ -28,7 +29,7 @@ class PresenceChannelJoinEvent implements ShouldBroadcast
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return \Illuminate\Broadcasting\Channel|array
+     * @return Channel|array
      */
     public function broadcastOn()
     {
