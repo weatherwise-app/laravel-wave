@@ -40,29 +40,13 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
 
     public function lastEventTimestamp(): int
     {
-        $keys = array_keys($this->db->xRevRange(
-            'broadcasted_events',
-            '-',
-            '+',
-            1
-        ));
+        $id = $this->latestEventId();
 
-        return $keys === [] ? 0 : explode('-', reset($keys))[0];
+        return $id === '0-0' ? 0 : (int) explode('-', $id)[0];
     }
 
     public function latestEventId(): string
     {
-        if ($this->db instanceof PredisConnection) {
-            // @phpstan-ignore-next-line -- executeRaw is proxied to the Predis client via __call
-            $response = $this->db->executeRaw([
-                'XREVRANGE', 'broadcasted_events', '+', '-', 'COUNT', '1',
-            ]);
-
-            return is_array($response) && $response !== []
-                ? (string) $response[0][0]
-                : '0-0';
-        }
-
         $keys = array_keys($this->db->xRevRange('broadcasted_events', '+', '-', 1));
 
         return $keys === [] ? '0-0' : (string) reset($keys);

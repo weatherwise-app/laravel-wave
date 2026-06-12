@@ -141,7 +141,7 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
 
             $entries = array_filter(
                 $this->streams[$stream],
-                fn ($entryId) => strcmp($entryId, $lastId) > 0,
+                fn ($entryId) => $this->compareStreamIds($entryId, $lastId) > 0,
                 ARRAY_FILTER_USE_KEY
             );
 
@@ -155,6 +155,38 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
         }
 
         return $result === [] ? false : $result;
+    }
+
+    /**
+     * Entries with start <= id <= end, oldest first. "-" and "+" are the
+     * open min/max bounds, as on a real Redis server.
+     *
+     * @return array<string, array<string, string>>
+     */
+    private function entriesBetween($stream, $start, $end): array
+    {
+        if (! isset($this->streams[$stream])) {
+            return [];
+        }
+
+        return array_filter(
+            $this->streams[$stream],
+            function ($entryId) use ($start, $end) {
+                $startCheck = $start === '-' || $this->compareStreamIds($entryId, $start) >= 0;
+                $endCheck = $end === '+' || $this->compareStreamIds($entryId, $end) <= 0;
+
+                return $startCheck && $endCheck;
+            },
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    private function compareStreamIds(string $a, string $b): int
+    {
+        [$aMs, $aSeq] = array_map(intval(...), explode('-', $a) + [1 => 0]);
+        [$bMs, $bSeq] = array_map(intval(...), explode('-', $b) + [1 => 0]);
+
+        return $aMs <=> $bMs ?: $aSeq <=> $bSeq;
     }
 
     public function xAdd($stream, $id, array $fields)
@@ -184,23 +216,8 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
 
     public function xRange($stream, $start, $end, $count = null)
     {
-        if (! isset($this->streams[$stream])) {
-            return [];
-        }
+        $entries = $this->entriesBetween($stream, $start, $end);
 
-        // Filter entries based on start and end IDs
-        $entries = array_filter(
-            $this->streams[$stream],
-            function ($entryId) use ($start, $end) {
-                $startCheck = $start === '-' || strcmp($entryId, $start) >= 0;
-                $endCheck = $end === '+' || strcmp($entryId, $end) <= 0;
-
-                return $startCheck && $endCheck;
-            },
-            ARRAY_FILTER_USE_KEY
-        );
-
-        // Limit the number of entries if count is specified
         if ($count !== null) {
             $entries = array_slice($entries, 0, $count, true);
         }
@@ -208,26 +225,15 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
         return $entries;
     }
 
+    /**
+     * Real Redis argument order: XREVRANGE key end start — end is the
+     * newest (max) bound, start the oldest (min). Inverted bounds yield
+     * an empty result, exactly like the real server.
+     */
     public function xRevRange($stream, $end, $start, $count = null)
     {
-        if (! isset($this->streams[$stream])) {
-            return [];
-        }
+        $entries = array_reverse($this->entriesBetween($stream, $start, $end), true);
 
-        // Filter entries based on start and end IDs
-        $entries = array_filter(
-            $this->streams[$stream],
-            function ($entryId) use ($start, $end) {
-                $startCheck = $start === '+' || strcmp($entryId, $start) <= 0;
-                $endCheck = $end === '-' || strcmp($entryId, $end) >= 0;
-
-                return $startCheck && $endCheck;
-            },
-            ARRAY_FILTER_USE_KEY
-        );
-
-        // Reverse the entries and apply count limit
-        $entries = array_reverse($entries, true);
         if ($count !== null) {
             $entries = array_slice($entries, 0, $count, true);
         }
