@@ -4,26 +4,42 @@ namespace Qruto\Wave;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Redis\Connections\PhpRedisConnection;
+use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis;
 use Qruto\Wave\Events\SseConnectionClosedEvent;
+use Qruto\Wave\Sse\EventFactory;
+use Throwable;
 
+/**
+ * Legacy pub/sub based subscriber. Holds a Redis connection in subscribe
+ * mode for the lifetime of the SSE request, so it is only suitable for
+ * traditional per-request runtimes (PHP-FPM). Use the default stream
+ * subscriber for Octane and other long-lived application servers.
+ */
 class RedisSubscriber implements ServerSentEventSubscriber
 {
-    public function start(Closure $onMessage, Request $request, string $socket)
+    public function start(Closure $onMessage, Request $request, string $socket, ?string $lastEventId = null)
     {
-        $redisConnectionName = config('broadcasting.connections.redis.connection');
+        $connectionName = subscriptionConnectionName();
 
-        /** @var \Illuminate\Redis\Connections\PhpRedisConnection|\Illuminate\Redis\Connections\PredisConnection $connection */
-        $connection = Redis::connection("$redisConnectionName-subscription");
+        /** @var PhpRedisConnection|PredisConnection $connection */
+        $connection = Redis::connection($connectionName);
 
-        register_shutdown_function(function () use ($request, $connection, $socket) {
-            if (connection_aborted() !== 0) {
-                event(new SseConnectionClosedEvent($request->user(), $socket));
+        try {
+            $connection->psubscribe('*', function (string $message, string $channel) use ($onMessage) {
+                $onMessage(EventFactory::fromRedisMessage($message, $channel));
+            });
+        } finally {
+            event(new SseConnectionClosedEvent($request->user(), $socket));
+
+            try {
+                $connection->disconnect();
+            } catch (Throwable) {
+                // The connection may already be gone.
             }
 
-            $connection->disconnect();
-        });
-
-        $connection->psubscribe('*', $onMessage);
+            Redis::purge($connectionName);
+        }
     }
 }

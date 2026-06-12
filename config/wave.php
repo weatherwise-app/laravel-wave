@@ -56,6 +56,52 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Event Subscriber
+    |--------------------------------------------------------------------------
+    |
+    | How open SSE connections receive broadcast events from Redis.
+    |
+    | "stream" reads the broadcast event history stream with blocking reads
+    | (XREAD BLOCK). Connections never enter Redis subscribe mode, send
+    | periodic heartbeats, detect disconnected clients promptly and clean up
+    | in-band, which makes it safe for long-lived application servers such as
+    | Laravel Octane.
+    |
+    | "pubsub" is the legacy PSUBSCRIBE implementation. Only use it on
+    | per-request runtimes (PHP-FPM).
+    |
+    */
+    'subscriber' => env('WAVE_SUBSCRIBER', 'stream'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Stream Read Timeout
+    |--------------------------------------------------------------------------
+    |
+    | How long (in seconds) a blocking stream read waits for new events
+    | before sending a heartbeat comment to the client. The heartbeat keeps
+    | proxies from timing out the connection and surfaces disconnected
+    | clients. Only applies to the "stream" subscriber.
+    |
+    */
+    'stream_read_timeout' => env('WAVE_STREAM_READ_TIMEOUT', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Max Connection Lifetime
+    |--------------------------------------------------------------------------
+    |
+    | Close every SSE connection after this many seconds (0 keeps connections
+    | open indefinitely). Clients reconnect automatically and resume from the
+    | last received event, so no events are lost. A bounded lifetime lets
+    | long-lived runtimes recycle workers and drain gracefully on deploys.
+    | Only applies to the "stream" subscriber.
+    |
+    */
+    'max_connection_lifetime' => env('WAVE_MAX_CONNECTION_LIFETIME', 0),
+
+    /*
+    |--------------------------------------------------------------------------
     | Routes Path
     |--------------------------------------------------------------------------
     |

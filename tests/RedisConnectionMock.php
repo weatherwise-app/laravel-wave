@@ -97,6 +97,11 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
         return $this;
     }
 
+    public function purge($name = null)
+    {
+        return $this;
+    }
+
     public function subscribe($channels, Closure $callback)
     {
         return $this;
@@ -123,6 +128,33 @@ class RedisConnectionMock extends RedisMock implements Connection, Factory
         $callback($this);
 
         return true;
+    }
+
+    public function xRead(array $streams, $count = null, $block = null)
+    {
+        $result = [];
+
+        foreach ($streams as $stream => $lastId) {
+            if (! isset($this->streams[$stream])) {
+                continue;
+            }
+
+            $entries = array_filter(
+                $this->streams[$stream],
+                fn ($entryId) => strcmp($entryId, $lastId) > 0,
+                ARRAY_FILTER_USE_KEY
+            );
+
+            if ($count !== null) {
+                $entries = array_slice($entries, 0, $count, true);
+            }
+
+            if ($entries !== []) {
+                $result[$stream] = $entries;
+            }
+        }
+
+        return $result === [] ? false : $result;
     }
 
     public function xAdd($stream, $id, array $fields)

@@ -33,16 +33,9 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
             'broadcasted_events',
             $timestamp.'-'.$sequence,
             '+'
-        ))->map(function ($event, $id) {
-            $event['data'] = json_decode(
-                $event['data'],
-                true,
-                512,
-                JSON_THROW_ON_ERROR
-            );
-
-            return new BroadcastingEvent(...['id' => $id] + $event);
-        })->values();
+        ))->map(
+            fn ($event, $id) => BroadcastingEvent::fromStreamEntry((string) $id, $event)
+        )->values();
     }
 
     public function lastEventTimestamp(): int
@@ -55,6 +48,24 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
         ));
 
         return $keys === [] ? 0 : explode('-', reset($keys))[0];
+    }
+
+    public function latestEventId(): string
+    {
+        if ($this->db instanceof PredisConnection) {
+            // @phpstan-ignore-next-line -- executeRaw is proxied to the Predis client via __call
+            $response = $this->db->executeRaw([
+                'XREVRANGE', 'broadcasted_events', '+', '-', 'COUNT', '1',
+            ]);
+
+            return is_array($response) && $response !== []
+                ? (string) $response[0][0]
+                : '0-0';
+        }
+
+        $keys = array_keys($this->db->xRevRange('broadcasted_events', '+', '-', 1));
+
+        return $keys === [] ? '0-0' : (string) reset($keys);
     }
 
     public function pushEvent(BroadcastingEvent $event)

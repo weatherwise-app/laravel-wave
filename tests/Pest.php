@@ -5,7 +5,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Str;
 use Illuminate\Support\Traits\ReflectsClosures;
+use Qruto\Wave\ServerSentEventSubscriber;
 use Qruto\Wave\Tests\RedisConnectionMock;
+use Qruto\Wave\Tests\Support\OneShotStreamSubscriber;
 use Qruto\Wave\Tests\Support\User;
 use Qruto\Wave\Tests\TestCase;
 
@@ -21,6 +23,13 @@ uses()->beforeEach(function () {
     $this->instance('redis', $redisMock);
     $redisMock->flushdb();
     $redisMock->flushEventsQueue();
+
+    // The production loop only stops on disconnect or lifetime end; tests
+    // need a single read pass so the streamed response can finish.
+    $this->app->bind(
+        ServerSentEventSubscriber::class,
+        OneShotStreamSubscriber::class
+    );
 
     $this->user = User::factory()->create();
 
@@ -51,7 +60,7 @@ function waveConnection(?Authenticatable $user = null, ?string $lastEventId = nu
 
         public $response;
 
-        /** @var \Illuminate\Support\Collection */
+        /** @var Collection */
         private $sentEvents;
 
         public function __construct(public ?Authenticatable $user, public ?string $lastEventId)
@@ -167,7 +176,11 @@ function waveConnection(?Authenticatable $user = null, ?string $lastEventId = nu
             }
 
             if (! $this->sentEvents) {
-                $rawEvents = array_filter(explode("\n\n", $this->response->streamedContent()));
+                $rawEvents = array_filter(
+                    explode("\n\n", $this->response->streamedContent()),
+                    // Heartbeat comments are not events.
+                    fn ($frame) => $frame !== '' && ! str_starts_with($frame, ':')
+                );
                 $this->sentEvents = Collection::make($rawEvents)->map(function ($event) {
                     $rows = explode("\n", $event);
                     $data = Str::after($rows[1], 'data: ');

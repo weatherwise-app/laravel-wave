@@ -41,56 +41,66 @@ class ServerSentEventStream implements Responsable
 
     public function toResponse($request)
     {
-        $this->disableTimeouts();
-
         $lastSocket = Broadcast::socket($request);
 
         $newSocket = $this->generateConnectionId();
 
         $request->headers->set('X-Socket-Id', $newSocket);
 
+        // Resolved at request time, before the response streams: events that
+        // arrive while the stream is starting up must not be skipped.
+        $lastEventId = $request->header('Last-Event-Id')
+            ?? $this->eventsHistory->latestEventId();
+
         return $this->responseFactory->stream(function () use (
             $request,
             $lastSocket,
-            $newSocket
+            $newSocket,
+            $lastEventId
         ) {
-            if ($request->hasHeader('Last-Event-Id')) {
-                $missedEvents = $this->eventsHistory->getEventsFrom($request->header('Last-Event-Id'));
+            // SSE responses outlive any sane execution time limit. The limit
+            // is restored afterwards because the process may serve further
+            // requests on long-lived runtimes such as Octane.
+            $previousTimeLimit = (int) ini_get('max_execution_time');
+            set_time_limit(0);
 
-                $missedEvents
-                    // TODO: except system channel
-                    ->filter(
-                        fn (
-                            BroadcastingEvent $event
-                        ) => $event->channel !== 'general'
-                    )
-                    ->each($this->eventHandler($request, $lastSocket));
-            }
+            try {
+                if ($request->hasHeader('Last-Event-Id')) {
+                    $this->eventsHistory->getEventsFrom($lastEventId)
+                        ->each(function (BroadcastingEvent $event) use ($request, $lastSocket, &$lastEventId) {
+                            // TODO: except system channel
+                            if ($event->channel !== 'general') {
+                                $this->eventHandler($request, $lastSocket)($event);
+                            }
 
-            // TODO: change general channel name
-            tap(
-                EventFactory::create(
-                    'general',
-                    'connected',
-                    $newSocket,
-                    $newSocket
-                ),
-                function (BroadcastingEvent $event) {
-                    $this->eventsHistory->pushEvent($event);
-
-                    $event->send();
+                            $lastEventId = $event->id;
+                        });
                 }
-            );
 
-            $this->eventSubscriber->start(function (
-                string $message,
-                string $channel
-            ) use ($request, $newSocket) {
-                $this->eventHandler(
+                // TODO: change general channel name
+                tap(
+                    EventFactory::create(
+                        'general',
+                        'connected',
+                        $newSocket,
+                        $newSocket
+                    ),
+                    function (BroadcastingEvent $event) {
+                        $this->eventsHistory->pushEvent($event);
+
+                        $event->send();
+                    }
+                );
+
+                $this->eventSubscriber->start(
+                    $this->eventHandler($request, $newSocket),
                     $request,
-                    $newSocket
-                )(EventFactory::fromRedisMessage($message, $channel));
-            }, $request, $newSocket);
+                    $newSocket,
+                    $lastEventId
+                );
+            } finally {
+                set_time_limit($previousTimeLimit);
+            }
         }, Response::HTTP_OK, self::HEADERS + ['X-Socket-Id' => $newSocket]);
     }
 
@@ -150,12 +160,6 @@ class ServerSentEventStream implements Responsable
         }
 
         return $event->socket === $socket;
-    }
-
-    private function disableTimeouts(): void
-    {
-        ini_set('default_socket_timeout', -1);
-        set_time_limit(0);
     }
 
     private function generateConnectionId(): string
