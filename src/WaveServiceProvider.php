@@ -33,13 +33,9 @@ class WaveServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             ->hasRoute('routes')
             ->hasCommand(SsePingCommand::class)
-            ->hasCommand(ServeCommand::class);
-
-        if (laravel11OrHigher()) {
-            $package
-                ->hasCommand(ConfigPublishCommand::class)
-                ->hasCommand(BroadcastingInstallCommand::class);
-        }
+            ->hasCommand(ServeCommand::class)
+            ->hasCommand(ConfigPublishCommand::class)
+            ->hasCommand(BroadcastingInstallCommand::class);
     }
 
     public function registeringPackage()

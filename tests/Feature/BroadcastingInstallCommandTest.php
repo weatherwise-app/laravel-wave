@@ -3,8 +3,6 @@
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 
-use function Qruto\Wave\laravel11OrHigher;
-
 it(
     'completely installs all required assets for broadcasting in default scenario',
     function () {
@@ -68,7 +66,4 @@ it(
         $this->assertFileExists($this->app->configPath('broadcasting.php'));
         unlink($this->app->configPath('broadcasting.php'));
     }
-)->skip(
-    ! laravel11OrHigher(),
-    '`install:broadcasting` command is only available for Laravel 11 or higher.'
 );
