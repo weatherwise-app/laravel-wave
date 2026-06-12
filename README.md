@@ -354,6 +354,53 @@ return [
 ];
 ```
 
+## Deploying with Laravel Octane
+
+Wave works on [Laravel Octane](https://laravel.com/docs/octane) (FrankenPHP,
+Swoole, RoadRunner) out of the box using the default `stream` subscriber. It
+delivers events with blocking reads on the broadcast event history stream
+instead of `PSUBSCRIBE`, so no Redis connection is ever left in subscribe
+mode, client disconnects are detected by heartbeats, and all cleanup happens
+in-band — nothing relies on `register_shutdown_function` or process-wide ini
+settings, which do not behave per-request on long-lived workers.
+
+The defaults are production-ready, but two options are worth reviewing for
+Octane deployments:
+
+```ini
+# .env
+
+# Seconds a blocking read waits before sending a heartbeat comment.
+# The heartbeat keeps proxies from idling out the connection and is the
+# upper bound on how quickly a dead client frees its worker.
+WAVE_STREAM_READ_TIMEOUT=5
+
+# Recommended on Octane: close every connection after this many seconds.
+# Clients reconnect automatically and resume from their last received
+# event, so no events are lost. A bounded lifetime lets octane:reload
+# and deploys drain workers gracefully instead of waiting on open
+# streams.
+WAVE_MAX_CONNECTION_LIFETIME=60
+```
+
+Two things to keep in mind:
+
+- **Worker sizing.** Each open SSE connection occupies one Octane worker
+  while it is connected — this is inherent to serving SSE from an HTTP
+  worker pool. Make sure the worker count comfortably exceeds your peak
+  number of concurrently connected clients, or keep
+  `WAVE_MAX_CONNECTION_LIFETIME` short.
+- **Response buffering.** SSE requires the full chain (server, proxies,
+  load balancers) to flush streamed responses. If your platform buffers
+  them (some managed FrankenPHP setups log
+  `the current responseWriter is not a flusher`), events will not reach
+  clients in real time no matter which subscriber is used.
+
+The legacy `PSUBSCRIBE`-based implementation remains available with
+`WAVE_SUBSCRIBER=pubsub`, but it pins a Redis connection in subscribe mode
+for the lifetime of every request and should only be used on per-request
+runtimes such as PHP-FPM.
+
 ## Persistent Connection with Nginx + PHP FPM
 
 Wave is designed to automatically reconnect after a request timeout.

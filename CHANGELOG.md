@@ -4,6 +4,11 @@ All notable changes to `laravel-wave` will be documented in this file.
 
 ## [Unreleased](https://github.com/qruto/laravel-wave/compare/0.10.1...main)
 
+- **Octane-safe SSE delivery**: new default `stream` subscriber delivers events with blocking reads (`XREAD BLOCK`) on the broadcast history stream instead of `PSUBSCRIBE` — no subscribe-mode connections, heartbeat-based disconnect detection, in-band cleanup, and an optional bounded connection lifetime (`wave.max_connection_lifetime`) with seamless client resume. The legacy pub/sub implementation remains available via `wave.subscriber => 'pubsub'`.
+- Connection close events now fire whenever a stream ends, keeping presence channels accurate on graceful closes.
+- Replaced `ini_set('default_socket_timeout', -1)` and `register_shutdown_function` cleanup with per-connection read timeouts and `try`/`finally` — required for long-lived runtimes (Octane), harmless on PHP-FPM.
+- Laravel 13 support; test suite on Pest 4 / PHPUnit 12; CI matrix updated.
+
 ## [0.10.1](https://github.com/qruto/laravel-wave/compare/0.10.0...0.10.1) - 2025-03-21
 
 fixed version constraints
