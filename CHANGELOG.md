@@ -4,10 +4,25 @@ All notable changes to `laravel-wave` will be documented in this file.
 
 ## [Unreleased](https://github.com/qruto/laravel-wave/compare/0.10.1...main)
 
+### Added
+
 - **Octane-safe SSE delivery**: new default `stream` subscriber delivers events with blocking reads (`XREAD BLOCK`) on the broadcast history stream instead of `PSUBSCRIBE` — no subscribe-mode connections, heartbeat-based disconnect detection, in-band cleanup, and an optional bounded connection lifetime (`wave.max_connection_lifetime`) with seamless client resume. The legacy pub/sub implementation remains available via `wave.subscriber => 'pubsub'`.
+- New configuration options: `wave.subscriber`, `wave.stream_read_timeout`, `wave.max_connection_lifetime`.
+- Laravel 13 support; test suite on Pest 4 / PHPUnit 12.
+- Integration tests against a real Redis server for both `phpredis` and `predis` clients, including key-prefix coverage; end-to-end Octane/FrankenPHP smoke test script (`docker/octane-smoke-test.sh`).
+
+### Fixed
+
+- `BroadcastEventHistoryRedisStream::lastEventTimestamp()` passed `XREVRANGE` bounds in the wrong order and always returned `0` against a real Redis server, causing `wave.ping` to fire eagerly on every connection request.
+- Stream reads now handle the connection's Redis key prefix (responses are keyed by the prefixed stream name; Predis additionally needs explicit prefixing for raw `XREAD`).
+- A malformed client-supplied `Last-Event-Id` header is treated as a fresh connection instead of reaching `XRANGE`/`XREAD` and erroring mid-stream.
 - Connection close events now fire whenever a stream ends, keeping presence channels accurate on graceful closes.
 - Replaced `ini_set('default_socket_timeout', -1)` and `register_shutdown_function` cleanup with per-connection read timeouts and `try`/`finally` — required for long-lived runtimes (Octane), harmless on PHP-FPM.
-- Laravel 13 support; test suite on Pest 4 / PHPUnit 12; CI matrix updated.
+
+### Breaking
+
+- Dropped support for Laravel 10 and 11 (now requires `^12.0|^13.0`) and removed the `laravel11OrHigher()` helper.
+- `ServerSentEventSubscriber::start()` gained a `?string $lastEventId` parameter and the `$onMessage` closure now receives a `Qruto\Wave\Storage\BroadcastingEvent` instead of a raw Redis message; `BroadcastEventHistory` gained `latestEventId(): string`. Custom implementations of either interface must be updated.
 
 ## [0.10.1](https://github.com/qruto/laravel-wave/compare/0.10.0...0.10.1) - 2025-03-21
 

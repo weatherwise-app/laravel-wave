@@ -94,7 +94,7 @@ setup to your exact requirements.
 
 ## Installation
 
-### Laravel 11 or higher
+Requires PHP 8.2+ and Laravel 12 or higher.
 
 Install the package via Composer at first, then install broadcasting setup:
 
@@ -103,28 +103,13 @@ composer require qruto/laravel-wave
 php artisan install:broadcasting
 ```
 
-### Laravel 10 or lower
-
-Install **Wave** on both server and client sides using Composer and npm:
-
-```bash
-composer require qruto/laravel-wave
-npm install laravel-wave
-```
-
-Then, set your `.env` file to use the `redis` broadcasting driver:
-
-```ini
-BROADCAST_DRIVER = redis
-```
-
 ## Usage
 
 After installing **Wave**, your server is ready to broadcast events.
 You can use it with **Echo** as usual or try `Wave` model API to work with
 predefined Eloquent events.
 
-In Laravel 11 or higher, after `install:broadcasting`, you will find:
+After `install:broadcasting`, you will find:
 
 - broadcasting channel authorization file in `routes/channels.php`
 - broadcasting configuration file in `config/broadcasting.php`
@@ -259,6 +244,8 @@ php artisan vendor:publish --tag="wave-config"
 Here are the contents of the published configuration file:
 
 ```php
+<?php
+
 return [
 
     /*
@@ -312,6 +299,52 @@ return [
         'frequency' => 30,
         'eager_env' => 'local', // null or array
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Event Subscriber
+    |--------------------------------------------------------------------------
+    |
+    | How open SSE connections receive broadcast events from Redis.
+    |
+    | "stream" reads the broadcast event history stream with blocking reads
+    | (XREAD BLOCK). Connections never enter Redis subscribe mode, send
+    | periodic heartbeats, detect disconnected clients promptly and clean up
+    | in-band, which makes it safe for long-lived application servers such as
+    | Laravel Octane.
+    |
+    | "pubsub" is the legacy PSUBSCRIBE implementation. Only use it on
+    | per-request runtimes (PHP-FPM).
+    |
+    */
+    'subscriber' => env('WAVE_SUBSCRIBER', 'stream'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Stream Read Timeout
+    |--------------------------------------------------------------------------
+    |
+    | How long (in seconds) a blocking stream read waits for new events
+    | before sending a heartbeat comment to the client. The heartbeat keeps
+    | proxies from timing out the connection and surfaces disconnected
+    | clients. Only applies to the "stream" subscriber.
+    |
+    */
+    'stream_read_timeout' => env('WAVE_STREAM_READ_TIMEOUT', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Max Connection Lifetime
+    |--------------------------------------------------------------------------
+    |
+    | Close every SSE connection after this many seconds (0 keeps connections
+    | open indefinitely). Clients reconnect automatically and resume from the
+    | last received event, so no events are lost. A bounded lifetime lets
+    | long-lived runtimes recycle workers and drain gracefully on deploys.
+    | Only applies to the "stream" subscriber.
+    |
+    */
+    'max_connection_lifetime' => env('WAVE_MAX_CONNECTION_LIFETIME', 0),
 
     /*
     |--------------------------------------------------------------------------
@@ -396,10 +429,19 @@ Two things to keep in mind:
   `the current responseWriter is not a flusher`), events will not reach
   clients in real time no matter which subscriber is used.
 
+With the `stream` subscriber the server already emits heartbeat comments
+on every read timeout, so the `sse:ping` command (or a scheduled ping) is
+not needed to keep connections alive — `wave.ping` only remains relevant
+for the legacy subscriber.
+
 The legacy `PSUBSCRIBE`-based implementation remains available with
 `WAVE_SUBSCRIBER=pubsub`, but it pins a Redis connection in subscribe mode
 for the lifetime of every request and should only be used on per-request
 runtimes such as PHP-FPM.
+
+An end-to-end check of the Octane behaviour (single FrankenPHP worker:
+live delivery, resume after reconnect, worker freed on client abort) is
+scripted in [`docker/octane-smoke-test.sh`](docker/octane-smoke-test.sh).
 
 ## Persistent Connection with Nginx + PHP FPM
 
@@ -494,6 +536,21 @@ or you can configure a separate pool for the SSE connection.
 
 ```bash
 composer test
+```
+
+The integration tests run against a real Redis server when one is
+reachable (`REDIS_HOST`/`REDIS_PORT`, both `phpredis` and `predis`
+clients) and are skipped otherwise. A ready-made environment lives in
+`docker/`:
+
+```bash
+docker build -t wave-test-php:8.4 -f docker/php.Dockerfile docker
+docker network create wave-test
+docker run -d --name wave-test-redis --network wave-test redis:7-alpine
+docker run --rm -v "$PWD":/app -w /app --network wave-test     -e REDIS_HOST=wave-test-redis wave-test-php:8.4 composer test:unit
+
+# full Octane/FrankenPHP end-to-end check
+./docker/octane-smoke-test.sh
 ```
 
 ## Support
