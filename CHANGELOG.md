@@ -22,7 +22,7 @@ All notable changes to `laravel-wave` will be documented in this file.
 ### Breaking
 
 - Dropped support for Laravel 10 and 11 (now requires `^12.0|^13.0`) and removed the `laravel11OrHigher()` helper.
-- `ServerSentEventSubscriber::start()` gained a `?string $lastEventId` parameter and the `$onMessage` closure now receives a `Qruto\Wave\Storage\BroadcastingEvent` instead of a raw Redis message; `BroadcastEventHistory` gained `latestEventId(): string`. Custom implementations of either interface must be updated.
+- `ServerSentEventSubscriber::start()` gained a required `string $lastEventId` parameter and the `$onMessage` closure now receives a `Qruto\Wave\Storage\BroadcastingEvent` instead of a raw Redis message; `BroadcastEventHistory` gained `latestEventId(): string`. Custom implementations of either interface must be updated.
 
 ## [0.10.1](https://github.com/qruto/laravel-wave/compare/0.10.0...0.10.1) - 2025-03-21
 

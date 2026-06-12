@@ -57,11 +57,6 @@ class EventFactory
         return $events;
     }
 
-    protected static function generateId(): string
-    {
-        return (string) Str::ulid();
-    }
-
     protected static function removeRedisPrefixFromChannel(string $pattern): string
     {
         return Str::after($pattern, config('database.redis.options.prefix', ''));

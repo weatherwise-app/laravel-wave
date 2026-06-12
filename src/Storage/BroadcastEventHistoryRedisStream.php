@@ -13,6 +13,11 @@ use function get_object_vars;
 
 class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
 {
+    /**
+     * The Redis stream that stores every broadcast event.
+     */
+    public const STREAM = 'broadcasted_events';
+
     protected int $lifetime;
 
     /** @var PhpRedisConnection|PredisConnection */
@@ -30,7 +35,7 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
         $sequence = (int) $sequence + 1;
 
         return collect($this->db->xRange(
-            'broadcasted_events',
+            self::STREAM,
             $timestamp.'-'.$sequence,
             '+'
         ))->map(
@@ -47,7 +52,7 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
 
     public function latestEventId(): string
     {
-        $keys = array_keys($this->db->xRevRange('broadcasted_events', '+', '-', 1));
+        $keys = array_keys($this->db->xRevRange(self::STREAM, '+', '-', 1));
 
         return $keys === [] ? '0-0' : (string) reset($keys);
     }
@@ -64,9 +69,9 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
 
         if ($this->db instanceof PredisConnection) {
             // @phpstan-ignore argument.type
-            $id = $this->db->xAdd('broadcasted_events', $eventData, '*'); // @phpstan-ignore argument.type
+            $id = $this->db->xAdd(self::STREAM, $eventData, '*'); // @phpstan-ignore argument.type
         } else {
-            $id = $this->db->xAdd('broadcasted_events', '*', $eventData);
+            $id = $this->db->xAdd(self::STREAM, '*', $eventData);
         }
 
         $event->id = $id;
@@ -81,7 +86,7 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
 
         // Fetch all events up to the threshold
         $oldEvents = $this->db->xRange(
-            'broadcasted_events',
+            self::STREAM,
             '-',
             $thresholdTimestamp.'-0'
         );
@@ -90,6 +95,6 @@ class BroadcastEventHistoryRedisStream implements BroadcastEventHistory
             return;
         }
 
-        $this->db->xDel('broadcasted_events', array_keys($oldEvents));
+        $this->db->xDel(self::STREAM, array_keys($oldEvents));
     }
 }

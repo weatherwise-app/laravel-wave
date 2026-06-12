@@ -10,7 +10,7 @@ use Qruto\Wave\RedisStreamSubscriber;
  * known number of read passes, mirroring how the legacy pub/sub mock
  * replays and returns.
  */
-class OneShotStreamSubscriber extends RedisStreamSubscriber
+class LimitedIterationsStreamSubscriber extends RedisStreamSubscriber
 {
     protected int $iterations = 0;
 

@@ -4,7 +4,6 @@ namespace Qruto\Wave\Sse;
 
 use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Request;
@@ -14,7 +13,6 @@ use Qruto\Wave\PresenceChannelEvent;
 use Qruto\Wave\ServerSentEventSubscriber;
 use Qruto\Wave\Storage\BroadcastEventHistory;
 use Qruto\Wave\Storage\BroadcastingEvent;
-use Qruto\Wave\Storage\PresenceChannelUsersRedisRepository;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
@@ -33,10 +31,8 @@ class ServerSentEventStream implements Responsable
     public function __construct(
         protected ServerSentEventSubscriber $eventSubscriber,
         protected ResponseFactory $responseFactory,
-        protected PresenceChannelUsersRedisRepository $store,
         protected BroadcastEventHistory $eventsHistory,
         protected PresenceChannelEvent $presenceChannelEvent,
-        protected ConfigRepository $config
     ) {}
 
     public function toResponse($request)
@@ -68,11 +64,13 @@ class ServerSentEventStream implements Responsable
 
             try {
                 if ($resumeFromId !== null) {
+                    $replayHandler = $this->eventHandler($request, $lastSocket);
+
                     $this->eventsHistory->getEventsFrom($lastEventId)
-                        ->each(function (BroadcastingEvent $event) use ($request, $lastSocket, &$lastEventId) {
+                        ->each(function (BroadcastingEvent $event) use ($replayHandler, &$lastEventId) {
                             // TODO: except system channel
                             if ($event->channel !== 'general') {
-                                $this->eventHandler($request, $lastSocket)($event);
+                                $replayHandler($event);
                             }
 
                             $lastEventId = $event->id;

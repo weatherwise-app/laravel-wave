@@ -14,7 +14,7 @@ interface ServerSentEventSubscriber
      * Stream broadcast events to the client until the connection ends.
      *
      * @param  Closure(BroadcastingEvent): void  $onMessage
-     * @param  string|null  $lastEventId  deliver events strictly after this event id when supported
+     * @param  string  $lastEventId  deliver events strictly after this event id
      */
-    public function start(Closure $onMessage, Request $request, string $socket, ?string $lastEventId = null);
+    public function start(Closure $onMessage, Request $request, string $socket, string $lastEventId);
 }

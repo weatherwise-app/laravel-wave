@@ -7,7 +7,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Traits\ReflectsClosures;
 use Qruto\Wave\ServerSentEventSubscriber;
 use Qruto\Wave\Tests\RedisConnectionMock;
-use Qruto\Wave\Tests\Support\OneShotStreamSubscriber;
+use Qruto\Wave\Tests\Support\LimitedIterationsStreamSubscriber;
 use Qruto\Wave\Tests\Support\User;
 use Qruto\Wave\Tests\TestCase;
 
@@ -28,7 +28,7 @@ uses()->beforeEach(function () {
     // need a single read pass so the streamed response can finish.
     $this->app->bind(
         ServerSentEventSubscriber::class,
-        OneShotStreamSubscriber::class
+        LimitedIterationsStreamSubscriber::class
     );
 
     $this->user = User::factory()->create();
