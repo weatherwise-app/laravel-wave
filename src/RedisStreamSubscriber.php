@@ -91,12 +91,14 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
         $blockMs = max(1000, (int) (config('wave.stream_read_timeout', 5) * 1000));
 
         if ($connection instanceof PredisConnection) {
-            // @phpstan-ignore-next-line -- executeRaw is proxied to the Predis client via __call
+            // Predis' native XREAD does not apply the configured key prefix
+            // (unlike its other stream commands), so issue it raw against
+            // the explicitly prefixed key.
             $entries = $this->normalizePredisEntries($connection->executeRaw([
                 'XREAD',
                 'COUNT', (string) self::READ_BATCH_SIZE,
                 'BLOCK', (string) $blockMs,
-                'STREAMS', self::STREAM, $lastId,
+                'STREAMS', $this->prefixedStream($connection), $lastId,
             ]));
         } else {
             $response = $connection->xRead([self::STREAM => $lastId], self::READ_BATCH_SIZE, $blockMs);
@@ -122,20 +124,16 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
      */
     protected function latestEventId($connection): string
     {
-        if ($connection instanceof PredisConnection) {
-            // @phpstan-ignore-next-line -- executeRaw is proxied to the Predis client via __call
-            $response = $connection->executeRaw([
-                'XREVRANGE', self::STREAM, '+', '-', 'COUNT', '1',
-            ]);
-
-            return is_array($response) && $response !== []
-                ? (string) $response[0][0]
-                : '0-0';
-        }
-
         $keys = array_keys($connection->xRevRange(self::STREAM, '+', '-', 1));
 
         return $keys === [] ? '0-0' : (string) reset($keys);
+    }
+
+    protected function prefixedStream(PredisConnection $connection): string
+    {
+        $prefix = $connection->client()->getOptions()->prefix;
+
+        return ($prefix === null ? '' : $prefix->getPrefix()).self::STREAM;
     }
 
     /**
