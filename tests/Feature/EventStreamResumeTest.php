@@ -61,3 +61,12 @@ it('not received others connection events', function () {
 
     $connection->assertEventNotReceived(PublicEvent::class);
 });
+
+it('treats a malformed Last-Event-Id as a fresh connection', function () {
+    event(new PublicEvent);
+
+    $connection = waveConnection($this->user, 'not-a-stream-id');
+
+    $connection->assertConnected();
+    $connection->assertEventNotReceived(PublicEvent::class);
+});

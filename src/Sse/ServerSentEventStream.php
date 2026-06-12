@@ -47,15 +47,17 @@ class ServerSentEventStream implements Responsable
 
         $request->headers->set('X-Socket-Id', $newSocket);
 
+        $resumeFromId = $this->validResumeId($request->header('Last-Event-Id'));
+
         // Resolved at request time, before the response streams: events that
         // arrive while the stream is starting up must not be skipped.
-        $lastEventId = $request->header('Last-Event-Id')
-            ?? $this->eventsHistory->latestEventId();
+        $lastEventId = $resumeFromId ?? $this->eventsHistory->latestEventId();
 
         return $this->responseFactory->stream(function () use (
             $request,
             $lastSocket,
             $newSocket,
+            $resumeFromId,
             $lastEventId
         ) {
             // SSE responses outlive any sane execution time limit. The limit
@@ -65,7 +67,7 @@ class ServerSentEventStream implements Responsable
             set_time_limit(0);
 
             try {
-                if ($request->hasHeader('Last-Event-Id')) {
+                if ($resumeFromId !== null) {
                     $this->eventsHistory->getEventsFrom($lastEventId)
                         ->each(function (BroadcastingEvent $event) use ($request, $lastSocket, &$lastEventId) {
                             // TODO: except system channel
@@ -160,6 +162,17 @@ class ServerSentEventStream implements Responsable
         }
 
         return $event->socket === $socket;
+    }
+
+    /**
+     * The header is client-controlled; anything that isn't a Redis stream
+     * id is treated as a fresh connection rather than reaching XRANGE/XREAD.
+     */
+    private function validResumeId(?string $id): ?string
+    {
+        return $id !== null && preg_match('/^\d+-\d+$/', $id) === 1
+            ? $id
+            : null;
     }
 
     private function generateConnectionId(): string
