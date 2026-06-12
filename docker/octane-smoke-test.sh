@@ -33,6 +33,7 @@ echo "==> Building PHP image"
 docker build -q -t "$IMAGE" -f "$ROOT/docker/php.Dockerfile" "$ROOT/docker" >/dev/null
 
 echo "==> Starting Redis and app containers"
+cleanup # clear leftovers from a previous run that died without the trap
 docker network create "$NET" >/dev/null
 docker run -d --name "$REDIS" --network "$NET" redis:7-alpine >/dev/null
 docker run -d --name "$APP" --network "$NET" -v "$ROOT":/package "$IMAGE" sleep infinity >/dev/null

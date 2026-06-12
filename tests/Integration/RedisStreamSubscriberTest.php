@@ -4,6 +4,7 @@ use Illuminate\Redis\RedisManager;
 use Illuminate\Support\Facades\Redis;
 use Qruto\Wave\RedisStreamSubscriber;
 use Qruto\Wave\Storage\BroadcastEventHistory;
+use Qruto\Wave\Storage\BroadcastEventHistoryRedisStream;
 use Qruto\Wave\Storage\BroadcastingEvent;
 
 /**
@@ -44,7 +45,9 @@ it('reads events and ids from a real Redis stream', function (string $client) {
     Redis::swap($manager);
     config()->set('wave.stream_read_timeout', 1);
 
-    $connection->flushdb();
+    // Surgical cleanup: REDIS_HOST may point at a shared server, so only
+    // remove the one (prefixed) key this test touches.
+    $connection->del(BroadcastEventHistoryRedisStream::STREAM);
 
     try {
         $history = app(BroadcastEventHistory::class);
@@ -59,17 +62,11 @@ it('reads events and ids from a real Redis stream', function (string $client) {
         {
             public function read($connection, string $lastId): array
             {
-                return $this->readNewEvents($connection, $lastId);
-            }
-
-            public function latest($connection): string
-            {
-                return $this->latestEventId($connection);
+                return $this->readNewEvents($connection, $lastId, 1000);
             }
         };
 
-        expect($history->latestEventId())->toBe($second->id)
-            ->and($probe->latest($connection))->toBe($second->id);
+        expect($history->latestEventId())->toBe($second->id);
 
         $events = $probe->read($connection, '0-0');
 
@@ -90,6 +87,6 @@ it('reads events and ids from a real Redis stream', function (string $client) {
         // and returns nothing.
         expect($probe->read($connection, $second->id))->toBe([]);
     } finally {
-        $connection->flushdb();
+        $connection->del(BroadcastEventHistoryRedisStream::STREAM);
     }
 })->with(['phpredis', 'predis']);

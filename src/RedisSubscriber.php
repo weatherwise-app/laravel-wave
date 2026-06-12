@@ -19,7 +19,7 @@ use Throwable;
  */
 class RedisSubscriber implements ServerSentEventSubscriber
 {
-    public function start(Closure $onMessage, Request $request, string $socket, ?string $lastEventId = null)
+    public function start(Closure $onMessage, Request $request, string $socket, string $lastEventId)
     {
         $connectionName = subscriptionConnectionName();
 
@@ -31,8 +31,9 @@ class RedisSubscriber implements ServerSentEventSubscriber
                 $onMessage(EventFactory::fromRedisMessage($message, $channel));
             });
         } finally {
-            event(new SseConnectionClosedEvent($request->user(), $socket));
-
+            // Release the subscribe-mode connection before anything that can
+            // throw: leaked into the manager, it would poison the next
+            // request served by a long-lived worker.
             try {
                 $connection->disconnect();
             } catch (Throwable) {
@@ -40,6 +41,8 @@ class RedisSubscriber implements ServerSentEventSubscriber
             }
 
             Redis::purge($connectionName);
+
+            event(new SseConnectionClosedEvent($request->user(), $socket));
         }
     }
 }

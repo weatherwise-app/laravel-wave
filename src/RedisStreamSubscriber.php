@@ -9,6 +9,7 @@ use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Redis;
 use Qruto\Wave\Events\SseConnectionClosedEvent;
+use Qruto\Wave\Storage\BroadcastEventHistoryRedisStream;
 use Qruto\Wave\Storage\BroadcastingEvent;
 use Throwable;
 
@@ -22,11 +23,9 @@ use Throwable;
  */
 class RedisStreamSubscriber implements ServerSentEventSubscriber
 {
-    protected const STREAM = 'broadcasted_events';
-
     protected const READ_BATCH_SIZE = 100;
 
-    public function start(Closure $onMessage, Request $request, string $socket, ?string $lastEventId = null)
+    public function start(Closure $onMessage, Request $request, string $socket, string $lastEventId)
     {
         $connectionName = subscriptionConnectionName();
 
@@ -34,12 +33,11 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
         $connection = Redis::connection($connectionName);
 
         $startedAt = now()->getTimestamp();
+        $lastId = $lastEventId;
 
         try {
-            $lastId = $lastEventId ?? $this->latestEventId($connection);
-
             while ($this->shouldContinue($startedAt)) {
-                $events = $this->readNewEvents($connection, $lastId);
+                $events = $this->readNewEvents($connection, $lastId, $this->blockMilliseconds($startedAt));
 
                 if ($events === []) {
                     $this->sendHeartbeat();
@@ -62,8 +60,8 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
                 }
             }
         } finally {
-            event(new SseConnectionClosedEvent($request->user(), $socket));
-
+            // Release the connection before anything that can throw: it must
+            // never outlive the request on a long-lived worker.
             try {
                 $connection->disconnect();
             } catch (Throwable) {
@@ -71,6 +69,8 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
             }
 
             Redis::purge($connectionName);
+
+            event(new SseConnectionClosedEvent($request->user(), $socket));
         }
     }
 
@@ -83,13 +83,29 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
     }
 
     /**
+     * How long the next read may block: the configured read timeout, clamped
+     * to the remaining connection lifetime so the stream closes on schedule.
+     */
+    protected function blockMilliseconds(int $startedAt): int
+    {
+        $blockMs = max(1000, (int) (config('wave.stream_read_timeout', 5) * 1000));
+        $lifetime = (int) config('wave.max_connection_lifetime', 0);
+
+        if ($lifetime <= 0) {
+            return $blockMs;
+        }
+
+        $remainingMs = ($startedAt + $lifetime - now()->getTimestamp()) * 1000;
+
+        return max(1, min($blockMs, $remainingMs));
+    }
+
+    /**
      * @param  Connection|\Illuminate\Contracts\Redis\Connection  $connection
      * @return BroadcastingEvent[]
      */
-    protected function readNewEvents($connection, string $lastId): array
+    protected function readNewEvents($connection, string $lastId, int $blockMs): array
     {
-        $blockMs = max(1000, (int) (config('wave.stream_read_timeout', 5) * 1000));
-
         if ($connection instanceof PredisConnection) {
             // Predis' native XREAD does not apply the configured key prefix
             // (unlike its other stream commands), so issue it raw against
@@ -101,7 +117,11 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
                 'STREAMS', $this->prefixedStream($connection), $lastId,
             ]));
         } else {
-            $response = $connection->xRead([self::STREAM => $lastId], self::READ_BATCH_SIZE, $blockMs);
+            $response = $connection->xRead(
+                [BroadcastEventHistoryRedisStream::STREAM => $lastId],
+                self::READ_BATCH_SIZE,
+                $blockMs
+            );
 
             // The response is keyed by the requested stream name — with the
             // connection's key prefix applied — so don't match it by name.
@@ -119,21 +139,11 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
         return $events;
     }
 
-    /**
-     * @param  Connection|\Illuminate\Contracts\Redis\Connection  $connection
-     */
-    protected function latestEventId($connection): string
-    {
-        $keys = array_keys($connection->xRevRange(self::STREAM, '+', '-', 1));
-
-        return $keys === [] ? '0-0' : (string) reset($keys);
-    }
-
     protected function prefixedStream(PredisConnection $connection): string
     {
         $prefix = $connection->client()->getOptions()->prefix;
 
-        return ($prefix === null ? '' : $prefix->getPrefix()).self::STREAM;
+        return ($prefix === null ? '' : $prefix->getPrefix()).BroadcastEventHistoryRedisStream::STREAM;
     }
 
     /**
