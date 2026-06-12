@@ -101,7 +101,11 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
         } else {
             $response = $connection->xRead([self::STREAM => $lastId], self::READ_BATCH_SIZE, $blockMs);
 
-            $entries = is_array($response) ? ($response[self::STREAM] ?? []) : [];
+            // The response is keyed by the requested stream name — with the
+            // connection's key prefix applied — so don't match it by name.
+            $entries = is_array($response) && $response !== []
+                ? (array) reset($response)
+                : [];
         }
 
         $events = [];
@@ -160,11 +164,9 @@ class RedisStreamSubscriber implements ServerSentEventSubscriber
 
         $entries = [];
 
+        // Single requested stream; the reported name carries the
+        // connection's key prefix, so don't match it by name.
         foreach ($response as [$stream, $streamEntries]) {
-            if ($stream !== self::STREAM) {
-                continue;
-            }
-
             foreach ($streamEntries as [$id, $fields]) {
                 $pairs = [];
 
